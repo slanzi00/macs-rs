@@ -1,1 +1,22 @@
 /target
+
+# Generated data files
+*.txt
+!Cargo.toml
+
+# Generated plots
+*.png
+
+# Generated documentation
+/target/doc
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
