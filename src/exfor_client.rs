@@ -1,6 +1,10 @@
-use serde::{Deserialize, Serialize};
+/// EXFOR API client for fetching nuclear cross section data
+///
+/// This module provides functionality to query the IAEA EXFOR database
+/// for neutron-induced cross section data from various nuclear data libraries.
 
-#[derive(Debug, Deserialize, Serialize)]
+/// Internal data structure representing a section in the EXFOR database
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct Section {
     #[serde(alias = "Targ")]
     pub target: String,
@@ -34,17 +38,19 @@ struct Section {
     pub auth: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+/// Represents a single (energy, cross section) data point
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct CrossSectionPoint {
+    /// Energy in eV
     #[serde(alias = "E")]
     pub energy: f64,
+    /// Cross section in barns
     #[serde(alias = "Sig")]
     pub cross_section: f64,
-    #[serde(alias = "dSig")]
-    pub uncertainty: f64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+/// Represents a complete cross section dataset from a nuclear data library
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct CrossSectionDataset {
     pub id: String,
     #[serde(alias = "FILE")]
@@ -73,11 +79,13 @@ pub struct CrossSectionDataset {
     pub default_interpolation: String,
     #[serde(alias = "nPts")]
     pub n_pts: u32,
+    /// Vector of (energy, cross section) data points
     #[serde(alias = "pts")]
     pub points: Vec<CrossSectionPoint>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+/// API response containing cross section datasets
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct CrossSectionResponse {
     pub format: String,
     pub now: String,
@@ -85,7 +93,8 @@ pub struct CrossSectionResponse {
     pub datasets: Vec<CrossSectionDataset>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+/// Internal API response for section listing
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct E4Response {
     pub format: String,
     pub now: String,
@@ -94,6 +103,12 @@ struct E4Response {
     pub sections: Vec<Section>,
 }
 
+/// Fetches available sections from EXFOR database
+///
+/// # Arguments
+/// * `target` - Target nucleus (e.g., "Mo-94")
+/// * `reaction` - Reaction type (e.g., "n,g" for neutron capture)
+/// * `quantity` - Physical quantity (e.g., "SIG" for cross section)
 async fn fetch_data(
     target: &str,
     reaction: &str,
@@ -108,6 +123,11 @@ async fn fetch_data(
     Ok(response)
 }
 
+/// Filters sections by library name
+///
+/// # Arguments
+/// * `response` - API response containing sections
+/// * `lib_name` - Library name to filter (e.g., "JEFF-3.1", "JEFF-4.0", "ENDF-B-VIII.1")
 fn filter_by_library(response: E4Response, lib_name: &str) -> E4Response {
     let filtered_sections: Vec<Section> = response
         .sections
@@ -124,6 +144,21 @@ fn filter_by_library(response: E4Response, lib_name: &str) -> E4Response {
     }
 }
 
+/// Fetches cross section data from EXFOR database
+///
+/// # Arguments
+/// * `target` - Target nucleus (e.g., "Mo-94", "Zr-92")
+/// * `reaction` - Reaction type (e.g., "n,g" for neutron capture, "n,p" for (n,p) reaction)
+/// * `lib_name` - Nuclear data library name (e.g., "JEFF-3.1", "JEFF-4.0", "ENDF-B-VIII.1", "JENDL-5")
+///
+/// # Returns
+/// * `Ok(CrossSectionResponse)` - Response containing the cross section datasets
+/// * `Err` - Error if no data found or network error
+///
+/// # Example
+/// ```
+/// let data = fetch_cross_section("Mo-94", "n,g", "JEFF-4.0").await?;
+/// ```
 pub async fn fetch_cross_section(
     target: &str,
     reaction: &str,
