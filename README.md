@@ -9,8 +9,11 @@ The MACS is an important quantity in nuclear astrophysics, representing the reac
 ## Features
 
 - Automatic data retrieval from IAEA EXFOR API
-- Support for multiple nuclear data libraries (JEFF-3.1, JEFF-4.0, ENDF-B-VIII.1, JENDL-5, etc.)
-- Support for various reaction types (n,g), (n,p), etc.)
+- Atomic mass number parsed automatically from the target name (no need to pass it manually)
+- Support for multiple nuclear data libraries (JEFF-4.0, ENDF/B-VIII.1, JENDL-5, TENDL-2025, etc.)
+- Support for various reaction types (`n,g`, `n,p`, etc.)
+- Cumulative MACS vs energy export to CSV (`--cumulative`)
+- Python plotting script for cross section and cumulative MACS (`plot_cumulative_macs.py`)
 
 ## Installation
 
@@ -27,63 +30,100 @@ cargo build --release
 ### Basic Usage
 
 ```bash
-cargo run --release -- --target <NUCLEUS> --library <LIBRARY> --mass <MASS>
+cargo run --release -- --target <NUCLEUS> --library <LIBRARY>
 ```
 
 ### Required Arguments
 
-- `-t, --target <TARGET>` - Target nucleus (e.g., Mo-94, Zr-92)
-- `-l, --library <LIBRARY>` - Nuclear data library name
-- `-m, --mass <MASS>` - Atomic mass number
+- `-t, --target <TARGET>` — Target nucleus in the format `Element-A` (e.g., `Er-166`, `Mo-94`). The mass number is parsed automatically.
+- `-l, --library <LIBRARY>` — Nuclear data library name (use the exact name returned by the EXFOR API, e.g., `ENDF/B-VIII.1` with the slash).
 
 ### Optional Arguments
 
-- `-r, --reaction <REACTION>` - Reaction type (default: `n,g`)
-- `-T, --temperatures <TEMPS>` - Comma-separated temperatures in keV (default: `8.0,25.0,30.0,90.0`)
+- `-r, --reaction <REACTION>` — Reaction type (default: `n,g`)
+- `-T, --temperatures <TEMPS>` — Comma-separated temperatures in keV (default: `8.0,25.0,30.0,90.0`)
+- `-c, --cumulative` — Save cumulative MACS vs energy to a CSV file (filename auto-generated)
+
+### Available libraries for a given nucleus
+
+To see which libraries are available for a target, query the EXFOR API directly:
+
+```
+https://www-nds.iaea.org/exfor/e4list?Target=Er-166&Reaction=n,g&Quantity=SIG&json
+```
+
+The `LibName` field in each section entry is the exact string to pass to `--library`.
 
 ### Examples
 
-**Calculate MACS for Mo-94 using JEFF-3.1:**
+**Calculate MACS for Er-166 using ENDF/B-VIII.1:**
 ```bash
-cargo run --release -- --target Mo-94 --library JEFF-3.1 --mass 94
-```
-
-**Calculate MACS for Zr-92 using ENDF-B-VIII.1:**
-```bash
-cargo run --release -- --target Zr-92 --library ENDF-B-VIII.1 --mass 92
+cargo run --release -- --target Er-166 --library "ENDF/B-VIII.1"
 ```
 
 **Custom temperatures:**
 ```bash
-cargo run --release -- --target Mo-94 --library JEFF-4.0 --mass 94 -T 5,10,20,30,50,100
+cargo run --release -- --target Er-166 --library "JEFF-4.0" -T 5,10,20,30,50,100
+```
+
+**Save cumulative MACS to CSV:**
+```bash
+cargo run --release -- --target Er-166 --library "ENDF/B-VIII.1" -T 8,25,30,90 --cumulative
+```
+
+This generates a file named `Er-166_ENDF_B-VIII.1_ng_cumulative_macs.csv` with columns:
+
+```
+# Library: ENDF/B-VIII.1  Target: Er-166  Reaction: (n,g)
+E(keV),sigma(barn),MACS_cum_at8keV(mb),MACS_cum_at25keV(mb),MACS_cum_at30keV(mb),MACS_cum_at90keV(mb)
 ```
 
 **Different reaction type:**
 ```bash
-cargo run --release -- --target Mo-94 --library JEFF-3.1 --mass 94 --reaction n,p -T 30
+cargo run --release -- --target Mo-94 --library "JEFF-3.1" --reaction n,p -T 30
 ```
 
 ## Output
 
-The program outputs MACS values in millibarns (mb) for each specified temperature:
+The program prints MACS values in millibarns (mb) for each specified temperature:
 
 ```
-=== MACS Calculation for JEFF-4.0 Mo-94(n,g) ===
+=== MACS Calculation for ENDF/B-VIII.1 Er-166(n,g) ===
 
 T(keV)    MACS(mb)
 --------------------
-   8.0      195.468628
-  25.0      103.541586
-  30.0       93.522032
-  90.0       53.676243
+   8.0      1199.056605
+  25.0       665.818215
+  30.0       606.106442
+  90.0       324.170...
 ```
+
+## Plotting
+
+A Python script is provided to plot the cumulative MACS and cross section from a CSV file:
+
+```bash
+# Interactive
+python plot_cumulative_macs.py Er-166_ENDF_B-VIII.1_ng_cumulative_macs.csv
+
+# Save to PNG
+python plot_cumulative_macs.py Er-166_ENDF_B-VIII.1_ng_cumulative_macs.csv --out plot.png
+```
+
+The plot shows:
+- **Left axis** (log): cross section σ in barn (dashed)
+- **Right axis** (linear): cumulative MACS in mb at each temperature (solid lines)
+- **X axis** (log): energy in keV, range 10⁻³ – 10⁴ keV
+- Colorblind-safe Okabe-Ito palette
+
+Requires: `matplotlib`, `numpy` (no `pandas`).
 
 ## Dependencies
 
-- `reqwest` - HTTP client for API requests
-- `serde` / `serde_json` - JSON serialization
-- `tokio` - Async runtime
-- `clap` - Command-line argument parsing
+- `reqwest` — HTTP client for API requests
+- `serde` / `serde_json` — JSON serialization
+- `tokio` — Async runtime
+- `clap` — Command-line argument parsing
 
 ## References
 

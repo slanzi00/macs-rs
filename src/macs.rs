@@ -34,7 +34,7 @@ fn trapezoid_area(f: &dyn Fn(f64, f64) -> f64, x1: f64, x2: f64, y1: f64, y2: f6
 /// # Arguments
 /// * `energies` - Energy points in MeV
 /// * `cross_sections` - Cross section values in barns
-/// * `atomic_mass` - Atomic mass number (e.g., 94 for Mo-94)
+/// * `atomic_mass` - Atomic mass number, parsed automatically from the target name
 /// * `temperature_kev` - Temperature in keV
 ///
 /// # Returns
@@ -48,6 +48,86 @@ fn trapezoid_area(f: &dyn Fn(f64, f64) -> f64, x1: f64, x2: f64, y1: f64, y2: f6
 /// let macs = calculate_macs(&energies, &cross_sections, 94.0, 30.0)?;
 /// println!("MACS at 30 keV: {} mb", macs);
 /// ```
+/// Calculates the cumulative MACS as a function of energy at multiple temperatures.
+///
+/// For each energy point E_i, returns the partial integral from 0 to E_i,
+/// normalized by the same factor as the full MACS. This shows how much each
+/// energy region contributes to the total MACS.
+///
+/// # Arguments
+/// * `energies` - Energy points in MeV
+/// * `cross_sections` - Cross section values in barns
+/// * `atomic_mass` - Atomic mass number, parsed automatically from the target name
+/// * `temperatures_kev` - Slice of temperatures in keV
+///
+/// # Returns
+/// * `Ok(rows)` - Vec of (energy_MeV, Vec<cumulative_macs_mb>) one entry per energy point
+/// * `Err(msg)` - Error if inputs are invalid
+pub fn calculate_cumulative_macs(
+    energies: &[f64],
+    cross_sections: &[f64],
+    atomic_mass: f64,
+    temperatures_kev: &[f64],
+) -> Result<Vec<(f64, Vec<f64>)>, String> {
+    if energies.len() != cross_sections.len() {
+        return Err("Energy and cross section vectors must have the same length".to_string());
+    }
+    if energies.is_empty() {
+        return Err("Input vectors cannot be empty".to_string());
+    }
+
+    let a = atomic_mass / (1.0 + atomic_mass);
+
+    // Precompute per-temperature normalization and integrand closures
+    let temps_k: Vec<f64> = temperatures_kev
+        .iter()
+        .map(|&t| (t * 1e-3) / KB)
+        .collect();
+
+    let normalizations: Vec<f64> = temps_k
+        .iter()
+        .map(|&t_k| {
+            let kt = KB * t_k;
+            (2.0 * a.powi(2)) / (PI.sqrt() * kt.powi(2))
+        })
+        .collect();
+
+    let n_temps = temperatures_kev.len();
+    let n_pts = energies.len();
+
+    // running integrals[t] accumulates the trapezoid sum for temperature t
+    let mut running: Vec<f64> = vec![0.0; n_temps];
+    let mut rows: Vec<(f64, Vec<f64>)> = Vec::with_capacity(n_pts);
+
+    // First point: cumulative integral is 0
+    rows.push((energies[0], vec![0.0; n_temps]));
+
+    for i in 1..n_pts {
+        let e1 = energies[i - 1];
+        let e2 = energies[i];
+        let cs1 = cross_sections[i - 1];
+        let cs2 = cross_sections[i];
+
+        for (t_idx, &t_k) in temps_k.iter().enumerate() {
+            let kt = KB * t_k;
+            let f1 = cs1 * e1 * (-(a * e1) / kt).exp();
+            let f2 = cs2 * e2 * (-(a * e2) / kt).exp();
+            running[t_idx] += 0.5 * (f1 + f2) * (e2 - e1);
+        }
+
+        let cum_macs: Vec<f64> = running
+            .iter()
+            .zip(normalizations.iter())
+            // convert barns → millibarns
+            .map(|(&integral, &norm)| norm * integral * 1000.0)
+            .collect();
+
+        rows.push((e2, cum_macs));
+    }
+
+    Ok(rows)
+}
+
 pub fn calculate_macs(
     energies: &[f64],
     cross_sections: &[f64],
